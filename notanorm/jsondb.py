@@ -177,8 +177,7 @@ class JsonDb(DbBase):
         if self.closed:
             raise notanorm.errors.DbClosedError
 
-        todo = self._parse_memo.get(sql)
-        if todo is None:
+        if (todo := self._parse_memo.get(sql)) is None:
             todo = parse(sql, "sqlite")
             self._parse_memo[sql] = todo
 
@@ -197,29 +196,23 @@ class JsonDb(DbBase):
     def execute_cursor_stmts(self, cursor: QueryRes, stmts: list, parameters):
         for ent in stmts:
             # this is all we support
-            op = ent.find(exp.Select)
-            if op:
+            if op := ent.find(exp.Select):
                 cursor.generator = self.__op_select(op, parameters)
                 return cursor
             self.__check_read_only()
             self.__state.dirty = True
-            op = ent.find(exp.Insert)
-            if op:
+            if op := ent.find(exp.Insert):
                 return self.__op_insert(cursor, op, parameters)
-            op = ent.find(exp.Delete)
-            if op:
+            if op := ent.find(exp.Delete):
                 return self.__op_delete(cursor, op, parameters)
-            op = ent.find(exp.Update)
-            if op:
+            if op := ent.find(exp.Update):
                 return self.__op_update(cursor, op, parameters)
-            op = ent.find(exp.Drop)
-            if op:
+            if op := ent.find(exp.Drop):
                 return self.__op_drop(cursor, op, parameters)
             raise NotImplementedError(f"{ent} not supported")
 
     def __op_drop(self, ret, op, parameters):
-        tab = op.find(exp.Table)
-        if tab:
+        if tab := op.find(exp.Table):
             if op.args["kind"] == "index":
                 found = False
                 for tab_name, info in self.__model.items():
@@ -393,14 +386,11 @@ class JsonDb(DbBase):
         where = op.find(exp.Where)
         where_dict = self.__op_where(where, params)
         rows = self.__get_tab_dat(tab)
-        ord = op.find(exp.Order)
-        if ord:
+        if ord := op.find(exp.Order):
             rows = self.__sort(ord, rows)
-        lim = op.find(exp.Limit)
-        if lim:
+        if lim := op.find(exp.Limit):
             lim = self.__val_from(lim.expression, parameters)
-        off = op.find(exp.Offset)
-        if off:
+        if off := op.find(exp.Offset):
             off = self.__val_from(off.expression, parameters)
         # bug in sqlglot 10+11 flips this for sqlite parse
         if lim is not None and off is not None:

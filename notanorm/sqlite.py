@@ -286,8 +286,7 @@ class SqliteDb(DbBase):
     @classmethod
     def _column_def(cls, col: DbCol, single_primary: str):
         coldef = cls.quote_key(col.name)
-        typ = cls._type_map[col.typ]
-        if typ:
+        if typ := cls._type_map[col.typ]:
             coldef += " " + typ
         if col.notnull:
             coldef += " not null"

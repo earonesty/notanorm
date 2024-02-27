@@ -228,8 +228,7 @@ class MySqlDb(DbBase):
                     )
                 coldef += " auto_increment"
             coldefs.append(coldef)
-        keys = ["`" + k + "`" for k in primary_fields]
-        if keys:
+        if keys := ["`" + k + "`" for k in primary_fields]:
             coldefs.append("primary key(" + ",".join(keys) + ")")
 
         ignore = "if not exists " if ignore_existing else ""
