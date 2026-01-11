@@ -782,11 +782,11 @@ def create_and_fill_test_db(db, num, tab="foo", **fds):
     db.query(f"CREATE table {db.quote_key(tab)} ({fd_sql})")
     for ins in range(num):
         vals = {
-            nm: ins
-            if typ in ("integer primary key", "integer")
-            else 0
-            if typ == "integer not null"
-            else None
+            nm: (
+                ins
+                if typ in ("integer primary key", "integer")
+                else 0 if typ == "integer not null" else None
+            )
             for nm, typ in fds.items()
         }
         db.insert(tab, **vals)

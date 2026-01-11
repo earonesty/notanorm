@@ -2,6 +2,7 @@
 
 NOTE: Make sure to close the db handle when you are done.
 """
+
 import contextlib
 import os
 import time
@@ -129,8 +130,7 @@ class BaseQ(ABC):
         return os.urandom(16).hex()
 
     @abstractmethod
-    def resolve_field(self, field: str):
-        ...
+    def resolve_field(self, field: str): ...
 
     def field_sql(self):
         if not self.fields:
@@ -711,8 +711,7 @@ class DbBase(
     @abstractmethod
     def create_table(
         self, name, schema: DbTable, ignore_existing=False, create_indexes: bool = True
-    ):
-        ...
+    ): ...
 
     def create_indexes(
         self, name, schema: DbTable, existing_model: Optional[DbModel] = None
@@ -732,8 +731,7 @@ class DbBase(
             self._create_index(name, index_name, idx)
 
     @abstractmethod
-    def _create_index(self, tab, index_name, idx: DbIndex):
-        ...
+    def _create_index(self, tab, index_name, idx: DbIndex): ...
 
     def drop_index(self, table: str, index: DbIndex):
         self.drop_index_by_name(table, self.get_index_name(table, index))
@@ -1045,9 +1043,11 @@ class DbBase(
                 (
                     self.quote_key(field_map[key])
                     if key in field_map and type(field_map[key]) is AlreadyAliased
-                    else self.quote_keys(field_map[key])
-                    if key in field_map
-                    else self.quote_keys(key)
+                    else (
+                        self.quote_keys(field_map[key])
+                        if key in field_map
+                        else self.quote_keys(key)
+                    )
                 )
                 + self._op_from_val(val).op
                 + self.placeholder
@@ -1331,8 +1331,7 @@ class DbBase(
         return self.query_gen(sql, *vals, factory=factory)
 
     @abstractmethod
-    def version(self):
-        ...
+    def version(self): ...
 
     def aggregate(
         self,
