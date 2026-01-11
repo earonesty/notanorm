@@ -15,50 +15,44 @@ jobs:
           - os: ubuntu-latest
             python: 3.9
             mysql: 8.0
+            postgres: 14
           - os: ubuntu-latest
             python: 3.7
             mysql: 8.0
+            postgres: 14
           - os: windows-2022
             python: 3.9
             mysql: 5.7
-    name: ${{matrix.info.os}} ${{ matrix.info.python }} ${{ matrix.info.mysql }}
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+            postgres: 14
+    name: ${{matrix.info.os}} ${{ matrix.info.python }} ${{ matrix.info.mysql }} ${{ matrix.info.postgres }}
     steps:
     - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
+      name: Setup Python ${{ matrix.info.python }}
+      with:
+        python-version: ${{ matrix.info.python }}
+
     - uses: ankane/setup-mysql@v1
       with:
         mysql-version: ${{ matrix.info.mysql }}
-    - name: Configure PostgreSQL
+
+    - name: Setup PostgreSQL
+      uses: ikalnytskyi/action-setup-postgres@v8
+      with:
+        postgres-version: "${{ matrix.info.postgres }}"
+        username: postgres
+        password: postgres
+        database: postgres
+
+    - name: Configure PostgreSQL env
       run: |
         echo "PGHOST=localhost" >> $GITHUB_ENV
         echo "PGPORT=5432" >> $GITHUB_ENV
         echo "PGUSER=postgres" >> $GITHUB_ENV
         echo "PGPASSWORD=postgres" >> $GITHUB_ENV
-    - uses: actions/setup-python@v2
-      name: Setup Python ${{ matrix.info.python }}
-      with:
-        python-version: ${{ matrix.info.python }}
-    - name: Deps
-      run: |
-        python -m pip install --upgrade pip
-        make requirements
-    - name: Lint
-      run: |
-        make lint
+
     - name: Test
       run: |
+        python -m pip install --upgrade pip
         bash ./ci-test.sh
         bash ./ci-cov.sh
