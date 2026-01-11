@@ -544,6 +544,9 @@ def test_readonly_fail(db, db_name: str):
         db.query("PRAGMA query_only=ON;")
     elif db_name == "mysql":
         db.query("SET SESSION TRANSACTION READ ONLY;")
+    elif db_name == "postgres":
+        # PostgreSQL equivalent of "session is read-only" for subsequent transactions
+        db.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;")
     elif db_name == "jsondb":
         db.read_only = True
 
@@ -704,6 +707,23 @@ def test_uri_parse():
 
     assert typ == MySqlDb
     assert kws == {"host": "localhost", "port": 45}
+
+    # Test URL-style with port in netloc
+    typ, args, kws = parse_db_uri("mysql://localhost:3306")
+    assert typ == MySqlDb
+    assert kws == {"host": "localhost", "port": 3306}
+
+    # Test URL-style with port and database in path
+    typ, args, kws = parse_db_uri("mysql://localhost:3306/mydb")
+    assert typ == MySqlDb
+    assert kws == {"host": "localhost", "port": 3306, "db": "mydb"}
+
+    # Test URL-style with database in path
+    typ, args, kws = parse_db_uri("postgres://localhost:5432/testdb")
+    from notanorm import PostgresDb
+
+    assert typ == PostgresDb
+    assert kws == {"host": "localhost", "port": 5432, "dbname": "testdb"}
 
     typ, args, kws = parse_db_uri(
         "mysql://localhost?use_unicode=false&autocommit=true&buffered=FaLsE&compress=TrUe"

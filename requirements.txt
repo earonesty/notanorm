@@ -1,3 +1,8 @@
+sqlglot
+# drivers
+mysqlclient
+psycopg2-binary
+# dev
 pytest
 coverage>=5
 codecov
@@ -5,6 +10,5 @@ pytest-cov
 pytest-xdist
 black
 flake8
-sqlglot
-mysqlclient
 pre-commit
+dotenv

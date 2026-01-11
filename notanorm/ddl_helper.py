@@ -23,10 +23,20 @@ log = logging.getLogger(__name__)
 
 # some support for different sqlglot versions
 has_varb = getattr(exp.DataType.Type, "VARBINARY", None)
+has_blob = getattr(exp.DataType.Type, "BLOB", None)
+has_mediumblob = getattr(exp.DataType.Type, "MEDIUMBLOB", None)
+has_longblob = getattr(exp.DataType.Type, "LONGBLOB", None)
+has_mediumtext = getattr(exp.DataType.Type, "MEDIUMTEXT", None)
+has_longtext = getattr(exp.DataType.Type, "LONGTEXT", None)
+has_variant = getattr(exp.DataType.Type, "VARIANT", None)
+has_serial = getattr(exp.DataType.Type, "SERIAL", None)
+has_smallserial = getattr(exp.DataType.Type, "SMALLSERIAL", None)
+has_bigserial = getattr(exp.DataType.Type, "BIGSERIAL", None)
 
 
 class DDLHelper:
     # map of sqlglot expression types to internal model types
+    # Build TYPE_MAP dynamically to support different sqlglot versions
     TYPE_MAP = {
         exp.DataType.Type.INT: DbType.INTEGER,
         exp.DataType.Type.SMALLINT: DbType.INTEGER,
@@ -37,22 +47,32 @@ class DDLHelper:
         exp.DataType.Type.VARCHAR: DbType.TEXT,
         exp.DataType.Type.CHAR: DbType.TEXT,
         exp.DataType.Type.TEXT: DbType.TEXT,
-        exp.DataType.Type.VARIANT: DbType.ANY,
         exp.DataType.Type.DECIMAL: DbType.DOUBLE,
         exp.DataType.Type.DOUBLE: DbType.DOUBLE,
         exp.DataType.Type.FLOAT: DbType.FLOAT,
-        exp.DataType.Type.MEDIUMTEXT: DbType.TEXT,
-        exp.DataType.Type.MEDIUMBLOB: DbType.BLOB,
-        exp.DataType.Type.LONGTEXT: DbType.TEXT,
-        exp.DataType.Type.LONGBLOB: DbType.BLOB,
     }
 
+    # Add optional types if they exist in this sqlglot version
+    if has_blob:
+        TYPE_MAP[exp.DataType.Type.BLOB] = DbType.BLOB
+    if has_mediumblob:
+        TYPE_MAP[exp.DataType.Type.MEDIUMBLOB] = DbType.BLOB
+    if has_longblob:
+        TYPE_MAP[exp.DataType.Type.LONGBLOB] = DbType.BLOB
+    if has_mediumtext:
+        TYPE_MAP[exp.DataType.Type.MEDIUMTEXT] = DbType.TEXT
+    if has_longtext:
+        TYPE_MAP[exp.DataType.Type.LONGTEXT] = DbType.TEXT
+    if has_variant:
+        TYPE_MAP[exp.DataType.Type.VARIANT] = DbType.ANY
     if has_varb:
-        TYPE_MAP.update(
-            {
-                exp.DataType.Type.VARBINARY: DbType.BLOB,
-            }
-        )
+        TYPE_MAP[exp.DataType.Type.VARBINARY] = DbType.BLOB
+    if has_serial:
+        TYPE_MAP[exp.DataType.Type.SERIAL] = DbType.INTEGER
+    if has_smallserial:
+        TYPE_MAP[exp.DataType.Type.SMALLSERIAL] = DbType.INTEGER
+    if has_bigserial:
+        TYPE_MAP[exp.DataType.Type.BIGSERIAL] = DbType.INTEGER
 
     SIZE_MAP = {
         exp.DataType.Type.TINYINT: 1,
@@ -60,17 +80,28 @@ class DDLHelper:
         exp.DataType.Type.INT: 4,
         exp.DataType.Type.BIGINT: 8,
     }
+    if has_serial:
+        SIZE_MAP[exp.DataType.Type.SERIAL] = 4
+    if has_smallserial:
+        SIZE_MAP[exp.DataType.Type.SMALLSERIAL] = 2
+    if has_bigserial:
+        SIZE_MAP[exp.DataType.Type.BIGSERIAL] = 8
 
     FIXED_MAP = {
         exp.DataType.Type.CHAR,
     }
 
     # custom info for weird types and the drivers that might care aboutthem
-    CUSTOM_MAP = {
-        ("mysql", exp.DataType.Type.MEDIUMTEXT): DbColCustomInfo("mysql", "medium"),
-        ("mysql", exp.DataType.Type.MEDIUMBLOB): DbColCustomInfo("mysql", "medium"),
-        ("mysql", exp.DataType.Type.TEXT): DbColCustomInfo("mysql", "small"),
-    }
+    CUSTOM_MAP = {}
+    if has_mediumtext:
+        CUSTOM_MAP[("mysql", exp.DataType.Type.MEDIUMTEXT)] = DbColCustomInfo(
+            "mysql", "medium"
+        )
+    if has_mediumblob:
+        CUSTOM_MAP[("mysql", exp.DataType.Type.MEDIUMBLOB)] = DbColCustomInfo(
+            "mysql", "medium"
+        )
+    CUSTOM_MAP[("mysql", exp.DataType.Type.TEXT)] = DbColCustomInfo("mysql", "small")
 
     def __init__(self, ddl, *dialects, py_defaults=False):
         self.py_defaults = py_defaults
@@ -186,24 +217,127 @@ class DDLHelper:
             exp.PrimaryKeyColumnConstraint
         )
         unique = index.args.get("unique")
-        tab = index.args["this"].args["table"]
-        cols = index.args["this"].args["columns"]
+
+        # Find table - it might be in different places depending on sqlglot version
+        tab = index.find(exp.Table)
+        if not tab:
+            # Try old structure for backward compatibility
+            if "this" in index.args and "table" in index.args["this"].args:
+                tab = index.args["this"].args["table"]
+            else:
+                raise err.SchemaError(f"Could not find table in index: {index}")
+
+        # Find columns/expressions - try multiple structures for backward compatibility
+        cols = None
+
+        # Try direct access on index first (newest sqlglot versions)
+        if hasattr(index, "expressions"):
+            cols = index.expressions
+        elif hasattr(index, "columns"):
+            cols = index.columns
+        if cols == []:
+            cols = None
+
+        # Try args-based access
+        if cols is None and "expressions" in index.args:
+            # New structure: columns are directly in expressions
+            cols = index.args["expressions"]
+        elif cols is None and "columns" in index.args:
+            # Alternative: columns directly in args
+            cols = index.args["columns"]
+        if cols == []:
+            cols = None
+        elif cols is None and "this" in index.args:
+            this_obj = index.args["this"]
+            # Check if this_obj has args attribute (newer sqlglot versions)
+            if hasattr(this_obj, "args") and isinstance(this_obj.args, dict):
+                if "columns" in this_obj.args:
+                    cols = this_obj.args["columns"]
+                elif "expressions" in this_obj.args:
+                    cols = this_obj.args["expressions"]
+                # Newer sqlglot: columns may be under params->columns
+                params = this_obj.args.get("params")
+                if (
+                    cols is None
+                    and params
+                    and hasattr(params, "args")
+                    and isinstance(params.args, dict)
+                ):
+                    if "columns" in params.args:
+                        cols = params.args["columns"]
+            # Try old structure where columns might be directly accessible
+            if cols is None and hasattr(this_obj, "expressions"):
+                cols = this_obj.expressions
+            elif cols is None and hasattr(this_obj, "columns"):
+                cols = this_obj.columns
+
+        # Last resort: try to find all Column or Anonymous expressions in the index
+        if cols is None:
+            # Search for columns/expressions anywhere in the index structure
+            found_cols = []
+            for expr in index.find_all(exp.Column):
+                found_cols.append(expr)
+            for expr in index.find_all(exp.Anonymous):
+                found_cols.append(expr)
+            if found_cols:
+                cols = found_cols
+
+        if cols is None:
+            raise err.SchemaError(f"Could not find columns in index: {index}")
+
         field_info: List[Dict[str, Any]] = []
 
-        args: List[Expression] = (
-            cols.args["expressions"] if isinstance(cols, exp.Tuple) else [cols]
-        )
-        args = [a.this if isinstance(a, exp.Paren) else a for a in args]
+        # Extract expressions from cols - handle different sqlglot versions
+        if isinstance(cols, exp.Tuple):
+            if hasattr(cols, "args") and "expressions" in cols.args:
+                args = cols.args["expressions"]
+            elif hasattr(cols, "expressions"):
+                args = cols.expressions
+            else:
+                args = [cols]
+        elif isinstance(cols, list):
+            args = cols
+        else:
+            args = [cols]
+
+        # Unwrap Ordered wrappers (sqlglot >= 28) to get the underlying expression/column
+        args = [a.this if isinstance(a, exp.Ordered) else a for a in args]
+
+        # Unwrap Paren expressions - but check if they contain expressions
+        unwrapped_args = []
+        for a in args:
+            if isinstance(a, exp.Paren):
+                inner = a.this
+                # Check if the inner expression is a function, arithmetic, etc. (not just a column)
+                if dialect != "mysql":
+                    # For non-mysql, unwrap and check
+                    unwrapped_args.append(inner)
+                else:
+                    # For mysql, check if it's an expression (wrapped in parens means expression)
+                    # If it's not a Column or Anonymous, it's an expression
+                    if not isinstance(inner, (exp.Column, exp.Anonymous)):
+                        raise err.SchemaError("Unsupported type in index definition")
+                    unwrapped_args.append(inner)
+            else:
+                unwrapped_args.append(a)
+        args = unwrapped_args
 
         for ent in args:
             allowed_types: Tuple[Type[Expression], ...]
             if dialect != "mysql":
-                # For MySQL, a parenthesized arg here indicates an expression
-                # index. For other dialects, it's just a normal way to specify
-                # a column name.
-                while isinstance(ent, exp.Paren):
-                    ent = ent.this
-
+                # For non-mysql dialects, only Column is allowed
+                # Check for function calls, arithmetic, etc.
+                if isinstance(ent, exp.Column):
+                    # Valid column
+                    pass
+                else:
+                    # It's an expression (function, arithmetic, etc.)
+                    if dialect == "sqlite":
+                        raise err.SchemaError(
+                            "Indices on expressions are currently unsupported"
+                        )
+                    else:
+                        raise err.SchemaError("Unsupported type")
                 allowed_types = (exp.Column,)
             else:
                 # MySQL prefix indices (e.g. CREATE INDEX ... ON tbl(col(10)))
@@ -211,26 +345,123 @@ class DDLHelper:
                 allowed_types = (exp.Column, exp.Anonymous)
 
             if not isinstance(ent, allowed_types):
-                raise err.SchemaError(
-                    f"Unsupported type in index definition: {type(ent)}({ent})"
-                )
+                # Check if it's an expression (function call, arithmetic, etc.)
+                if dialect != "mysql" and not isinstance(ent, exp.Column):
+                    # For non-mysql dialects, expressions are not supported
+                    raise err.SchemaError(
+                        "Indices on expressions are currently unsupported"
+                    )
+                else:
+                    # For mysql or other cases, use generic error
+                    raise err.SchemaError(
+                        f"Unsupported type in index definition: {type(ent)}({ent})"
+                    )
 
             if dialect == "mysql" and isinstance(ent, exp.Anonymous):
-                exps = ent.args["expressions"]
+                # Handle different sqlglot versions for Anonymous expressions
+                if hasattr(ent, "args") and "expressions" in ent.args:
+                    exps = ent.args["expressions"]
+                elif hasattr(ent, "expressions"):
+                    exps = ent.expressions
+                else:
+                    # This might be an expression index, not a prefix index
+                    raise err.SchemaError("Unsupported type in index definition")
 
+                # Check if this is a prefix index (col(10)) or an expression
+                # Prefix indices have exactly one numeric argument (the length)
                 if len(exps) != 1:
-                    raise err.SchemaError(f"Invalid prefix index definition: {ent}")
+                    raise err.SchemaError("Unsupported type in index definition")
 
+                # Check if the Anonymous's 'this' is a Column/Identifier (prefix index) or something else (expression)
+                # For prefix indices: Anonymous(this=Identifier/Column("txt"), expressions=[Literal(10)])
+                # For expressions: Anonymous(this=Function(...), expressions=[...])
+                this_val = None
+                if hasattr(ent, "this"):
+                    this_val = ent.this
+                elif "this" in ent.args:
+                    this_val = ent.args["this"]
+
+                if this_val and not isinstance(
+                    this_val, (exp.Column, exp.Identifier, str)
+                ):
+                    # It's an expression, not a prefix index
+                    raise err.SchemaError("Unsupported type in index definition")
+
+                # Check if the first expression is a numeric literal (the prefix length)
+                first_exp = exps[0]
+                if not (isinstance(first_exp, exp.Literal) and not first_exp.is_string):
+                    # It's an expression, not a prefix index
+                    raise err.SchemaError("Unsupported type in index definition")
+
+                # Try to parse as prefix index - if it fails, it's an expression
                 try:
-                    prefix_len = int(exps[0].name)
-                except ValueError as e:
-                    raise err.SchemaError(
-                        f"Invalid prefix index length: {exps[0].name}"
-                    ) from e
+                    # Get the name/value from the expression - handle different structures
+                    exp_val = exps[0]
+                    if hasattr(exp_val, "name"):
+                        prefix_len = int(exp_val.name)
+                    elif hasattr(exp_val, "this"):
+                        prefix_len = int(exp_val.this)
+                    elif hasattr(exp_val, "value"):
+                        prefix_len = int(exp_val.value)
+                    else:
+                        prefix_len = int(str(exp_val))
 
-                field_info.append({"name": ent.name, "prefix_len": prefix_len})
+                    # Get the column name from the Anonymous expression
+                    # Try different ways to get the column name
+                    col_name = None
+                    if hasattr(ent, "this"):
+                        # Newer sqlglot: column name might be in 'this'
+                        this_val = ent.this
+                        if isinstance(this_val, exp.Column):
+                            col_name = this_val.name
+                        elif isinstance(this_val, exp.Identifier):
+                            col_name = this_val.name
+                        elif isinstance(this_val, str):
+                            col_name = this_val
+                        elif hasattr(this_val, "this"):
+                            col_name = this_val.this
+                        elif hasattr(this_val, "name"):
+                            col_name = this_val.name
+                        else:
+                            col_name = str(this_val)
+                    elif hasattr(ent, "name"):
+                        col_name = ent.name
+                    elif "this" in ent.args:
+                        this_val = ent.args["this"]
+                        if isinstance(this_val, exp.Column):
+                            col_name = this_val.name
+                        elif isinstance(this_val, exp.Identifier):
+                            col_name = this_val.name
+                        elif isinstance(this_val, str):
+                            col_name = this_val
+                        elif hasattr(this_val, "this"):
+                            col_name = this_val.this
+                        elif hasattr(this_val, "name"):
+                            col_name = this_val.name
+                        else:
+                            col_name = str(this_val)
+                    else:
+                        col_name = str(ent)
+
+                    # Normalize to lowercase
+                    if col_name:
+                        col_name = col_name.lower()
+                        field_info.append({"name": col_name, "prefix_len": prefix_len})
+                    else:
+                        raise err.SchemaError("Unsupported type in index definition")
+                except (ValueError, AttributeError, TypeError):
+                    # Not a valid prefix index, must be an expression
+                    raise err.SchemaError("Unsupported type in index definition")
             else:
-                field_info.append({"name": ent.name, "prefix_len": None})
+                # Get column name - normalize to lowercase for consistency
+                col_name = ent.name if hasattr(ent, "name") else str(ent)
+                if col_name:
+                    col_name = col_name.lower()
+                field_info.append({"name": col_name, "prefix_len": None})
+
+        # Ensure we actually captured columns; otherwise it's unsupported
+        if not field_info:
+            raise err.SchemaError("Unsupported type in index definition")
 
         return (
             DbIndex(
@@ -245,18 +476,33 @@ class DDLHelper:
         """Turn a sqlglot parsed ColumnDef into a model entry."""
         typ = info.find(exp.DataType)
         this = typ and typ.this
-        fixed = this in self.FIXED_MAP
-        size = self.SIZE_MAP.get(this, 0)
-        custom = self.CUSTOM_MAP.get((dialect, this), None)
+        fixed = this in self.FIXED_MAP if this else False
+        size = self.SIZE_MAP.get(this, 0) if this else 0
+        custom = self.CUSTOM_MAP.get((dialect, this), None) if this else None
         if not this:
-            typ = DbType.ANY
+            db_typ = DbType.ANY
         else:
-            typ = self.TYPE_MAP[this]
+            # Handle types that might not exist in all sqlglot versions
+            db_typ = self.TYPE_MAP.get(this, DbType.ANY)
         notnull = info.find(exp.NotNullColumnConstraint)
         autoinc = info.find(exp.AutoIncrementColumnConstraint)
         is_primary = info.find(exp.PrimaryKeyColumnConstraint)
         default = info.find(exp.DefaultColumnConstraint)
         is_unique = info.find(exp.UniqueColumnConstraint)
+
+        serial_types = tuple(
+            t
+            for t in (
+                getattr(exp.DataType.Type, "SERIAL", None),
+                getattr(exp.DataType.Type, "SMALLSERIAL", None),
+                getattr(exp.DataType.Type, "BIGSERIAL", None),
+            )
+            if t is not None
+        )
+        is_serial = bool(this and serial_types and this in serial_types)
+        autoinc_val = bool(autoinc) or is_serial
+        if is_serial:
+            size = self.SIZE_MAP.get(this, size)
 
         # sqlglot has no dedicated or well-known type for the 32 in VARCHAR(32)
         # so this is from the grammar of types:  VARCHAR(32) results in a "type.kind.args.expressions" tuple
@@ -287,10 +533,10 @@ class DDLHelper:
         return (
             DbCol(
                 name=info.name,
-                typ=typ,
+                typ=db_typ,
                 notnull=bool(notnull),
                 default=default,
-                autoinc=bool(autoinc),
+                autoinc=autoinc_val,
                 size=size,
                 fixed=fixed,
                 custom=custom,

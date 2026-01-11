@@ -9,6 +9,8 @@ make test
 
 make test-mysql
 
+make test-postgres
+
 # test pymysql
 python3 -mvenv env-pymysql
 . ./env-pymysql/bin/activate || . ./env-pymysql/Scripts/activate

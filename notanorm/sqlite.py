@@ -23,6 +23,10 @@ class SqliteDb(DbBase):
 
     @classmethod
     def uri_adjust(cls, args, kws):
+        # Move database kwarg to args if present (from URL path)
+        if "database" in kws and not args:
+            args.append(kws.pop("database"))
+
         typ: Callable[[Any], Any]
         for nam, typ in [
             ("timeout", float),

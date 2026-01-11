@@ -50,6 +50,10 @@ class MySqlDb(DbBase):
 
     @classmethod
     def uri_adjust(cls, args, kws):
+        # Convert database kwarg to db (MySQL uses db)
+        if "database" in kws and "db" not in kws:
+            kws["db"] = kws.pop("database")
+
         # adjust to appropriate types
         typ: Callable[[Any], Any]
         for nam, typ in [

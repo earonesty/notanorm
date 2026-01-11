@@ -127,7 +127,11 @@ def test_model_intsize(db):
     assert db.simplify_model(check) == db.simplify_model(model)
     if db.uri_name != "sqlite":
         # other db's support varying size integers
-        assert check["foo"].columns[0].size == 1
+        if db.uri_name == "postgres":
+            # postgres has no 1-byte int, so size=1 is stored as smallint
+            assert check["foo"].columns[0].size == 2
+        else:
+            assert check["foo"].columns[0].size == 1
         assert check["foo"].columns[1].size == 2
         assert check["foo"].columns[2].size == 4
         assert check["foo"].columns[3].size == 8
@@ -250,8 +254,8 @@ def test_model_prefix_index_multi(db: DbBase) -> None:
 def _check_index_prefix_lens(
     db: DbBase, tbl_expected: DbTable, tbl_actual: DbTable
 ) -> None:
-    if db.uri_name == "sqlite":
-        # SQLite doesn't support prefix indices, so we expect that metadata to be dropped
+    if db.uri_name in ("sqlite", "postgres"):
+        # SQLite doesn't support prefix indices, and postgres doesn't preserve prefix lengths
         assert len(tbl_expected.indexes) == 1
         new_fields = tuple(
             ind._replace(prefix_len=None)

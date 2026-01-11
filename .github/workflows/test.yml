@@ -22,11 +22,31 @@ jobs:
             python: 3.9
             mysql: 5.7
     name: ${{matrix.info.os}} ${{ matrix.info.python }} ${{ matrix.info.mysql }}
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     steps:
     - uses: actions/checkout@v2
     - uses: ankane/setup-mysql@v1
       with:
         mysql-version: ${{ matrix.info.mysql }}
+    - name: Configure PostgreSQL
+      run: |
+        echo "PGHOST=localhost" >> $GITHUB_ENV
+        echo "PGPORT=5432" >> $GITHUB_ENV
+        echo "PGUSER=postgres" >> $GITHUB_ENV
+        echo "PGPASSWORD=postgres" >> $GITHUB_ENV
     - uses: actions/setup-python@v2
       name: Setup Python ${{ matrix.info.python }}
       with:
