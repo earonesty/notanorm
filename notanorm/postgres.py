@@ -1,7 +1,7 @@
 import re
 import logging
 from collections import defaultdict
-from typing import Tuple, Any, Callable, Dict
+from typing import Tuple, Any, Callable, Dict, Optional
 from functools import partial
 import psycopg2
 import psycopg2.extras
@@ -811,7 +811,7 @@ class PostgresDb(DbBase):
                 s = inner
             return s
 
-        def _parse_left(part_s: str) -> tuple[str, int] | None:
+        def _parse_left(part_s: str) -> Optional[tuple[str, int]]:
             s = part_s.strip()
             # Accept left(...) and "left"(...) (quoted function name)
             m0 = re.match(r'(?is)^(?:"left"|left)\s*\(', s)
