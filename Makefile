@@ -12,10 +12,13 @@ test:
 	pytest -n 2 --cov notanorm -v tests --db sqlite --db jsondb
 
 test-all:
-	pytest --cov notanorm -v tests --db mysql --db sqlite --db jsondb
+	pytest --cov notanorm -v tests --db mysql --db sqlite --db jsondb --db postgres
 
 test-mysql:
 	pytest -v tests --cov notanorm --cov-append --db mysql
+
+test-postgres:
+	pytest -v tests --cov notanorm --cov-append --db postgres
 
 publish:
 	rm -rf dist

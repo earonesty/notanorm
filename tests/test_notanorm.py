@@ -254,14 +254,14 @@ def test_db_class(db):
 
     obj = db.select_one("foo", bar="hi", __class=Foo)
 
-    assert type(obj) == Foo
+    assert isinstance(obj, Foo)
 
     db.register_class("foo", Foo)
 
     obj = db.select_one("foo", bar="hi")
 
     assert obj.bar == "hi"
-    assert type(obj) == Foo
+    assert isinstance(obj, Foo)
 
 
 def test_db_select_in(db):
@@ -506,7 +506,6 @@ def test_select_gen_not_lock(db: DbBase):
     ev2 = threading.Event()
 
     def slow_q():
-        nonlocal thread_result
         for row in db.select_gen("foo", order_by="bar desc"):
             thread_result.append(row.bar)
             ev1.set()
@@ -544,6 +543,9 @@ def test_readonly_fail(db, db_name: str):
         db.query("PRAGMA query_only=ON;")
     elif db_name == "mysql":
         db.query("SET SESSION TRANSACTION READ ONLY;")
+    elif db_name == "postgres":
+        # PostgreSQL equivalent of "session is read-only" for subsequent transactions
+        db.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;")
     elif db_name == "jsondb":
         db.read_only = True
 
@@ -705,6 +707,23 @@ def test_uri_parse():
     assert typ == MySqlDb
     assert kws == {"host": "localhost", "port": 45}
 
+    # Test URL-style with port in netloc
+    typ, args, kws = parse_db_uri("mysql://localhost:3306")
+    assert typ == MySqlDb
+    assert kws == {"host": "localhost", "port": 3306}
+
+    # Test URL-style with port and database in path
+    typ, args, kws = parse_db_uri("mysql://localhost:3306/mydb")
+    assert typ == MySqlDb
+    assert kws == {"host": "localhost", "port": 3306, "db": "mydb"}
+
+    # Test URL-style with database in path
+    typ, args, kws = parse_db_uri("postgres://localhost:5432/testdb")
+    from notanorm import PostgresDb
+
+    assert typ == PostgresDb
+    assert kws == {"host": "localhost", "port": 5432, "dbname": "testdb"}
+
     typ, args, kws = parse_db_uri(
         "mysql://localhost?use_unicode=false&autocommit=true&buffered=FaLsE&compress=TrUe"
     )
@@ -763,11 +782,11 @@ def create_and_fill_test_db(db, num, tab="foo", **fds):
     db.query(f"CREATE table {db.quote_key(tab)} ({fd_sql})")
     for ins in range(num):
         vals = {
-            nm: ins
-            if typ in ("integer primary key", "integer")
-            else 0
-            if typ == "integer not null"
-            else None
+            nm: (
+                ins
+                if typ in ("integer primary key", "integer")
+                else 0 if typ == "integer not null" else None
+            )
             for nm, typ in fds.items()
         }
         db.insert(tab, **vals)
@@ -978,9 +997,9 @@ def test_joinq_left(db):
     assert len(list(row for row in rows if row.cid is not None)) == 3
 
 
-def test_joinq_right(db_mysql):
+@pytest.mark.db("mysql", "postgres")
+def test_joinq_right(db):
     # sqlite does not support right joins
-    db = db_mysql
     create_and_fill_test_db(db, 3, "a", aid="integer primary key", bid="integer")
     create_and_fill_test_db(db, 5, "b", bid="integer primary key", cid="integer")
 

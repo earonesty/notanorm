@@ -61,6 +61,8 @@ def _db_uri_style_2(dbstr: str) -> Tuple[str, List[str], Dict[str, Any]]:
 
     sqlite://file.db
     mysql://localhost?port=2203&passwd=moonpie&db=stuff
+    mysql://localhost:3306/mydb
+    postgres://localhost:5432/mydb
     """
 
     if "//" not in dbstr:
@@ -71,9 +73,56 @@ def _db_uri_style_2(dbstr: str) -> Tuple[str, List[str], Dict[str, Any]]:
     # 'ParseResult', 'scheme netloc path params query fragment')
 
     typ = res.scheme
-    args = res.netloc.split(",")
-    kws = parse_qs(res.query)
-    kws = {k: v[0] for k, v in kws.items()}
+
+    # Parse netloc to extract host and port
+    # netloc can be: "host", "host:port", "user@host:port", etc.
+    args = []
+    kws = {}
+
+    if res.netloc:
+        # Split netloc by comma for multiple hosts (if supported)
+        netloc_parts = res.netloc.split(",")
+        for netloc_part in netloc_parts:
+            # Check if port is present (format: host:port or user@host:port)
+            if ":" in netloc_part:
+                # Split by : to get host and port
+                # Handle IPv6 addresses by checking for brackets
+                if netloc_part.startswith("["):
+                    # IPv6 format: [::1]:port
+                    bracket_end = netloc_part.rindex("]")
+                    host = netloc_part[: bracket_end + 1]
+                    port_str = netloc_part[bracket_end + 2 :]
+                    if port_str:
+                        kws["port"] = port_str
+                    args.append(host)
+                else:
+                    # Regular format: host:port
+                    host, port_str = netloc_part.rsplit(":", 1)
+                    # Only treat as port if it's numeric
+                    try:
+                        int(port_str)
+                        kws["port"] = port_str
+                        args.append(host)
+                    except ValueError:
+                        # Not a port, treat whole thing as host
+                        args.append(netloc_part)
+            else:
+                args.append(netloc_part)
+
+    # Parse path to extract database name
+    # Path format: /database or /path/to/database
+    if res.path:
+        # Remove leading slash and use as database name
+        db_path = res.path.lstrip("/")
+        if db_path:
+            kws["database"] = db_path
+
+    # Parse query string for additional kwargs
+    query_kws = parse_qs(res.query)
+    query_kws = {k: v[0] for k, v in query_kws.items()}
+    # Query params override path/extracted values
+    kws.update(query_kws)
+
     return typ, args, kws
 
 

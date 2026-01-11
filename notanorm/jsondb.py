@@ -136,7 +136,9 @@ class JsonDb(DbBase):
             except PermissionError as ex:
                 last_ex = ex
                 sleep_time = self.reconnect_backoff_start
-                sleep_time = secrets.SystemRandom().uniform(sleep_time * 0.5, sleep_time * 1.5)
+                sleep_time = secrets.SystemRandom().uniform(
+                    sleep_time * 0.5, sleep_time * 1.5
+                )
                 time.sleep(sleep_time)
         assert isinstance(last_ex, Exception)
         raise last_ex
@@ -182,7 +184,10 @@ class JsonDb(DbBase):
             todo = parse(sql, "sqlite")
             self._parse_memo[sql] = todo
 
-        assert not todo[0].find(exp.AlterTable), "alter not needed for json"
+        # Older sqlglot versions may not have AlterTable; fall back to Alter
+        alter_cls = getattr(exp, "AlterTable", None) or getattr(exp, "Alter", None)
+        if alter_cls:
+            assert not todo[0].find(alter_cls), "alter not needed for json"
 
         if todo:
             if todo[0].find(exp.Create):
@@ -220,7 +225,8 @@ class JsonDb(DbBase):
     def __op_drop(self, ret, op, parameters):
         tab = op.find(exp.Table)
         if tab:
-            if op.args["kind"] == "index":
+            kind = op.args.get("kind")
+            if isinstance(kind, str) and kind.lower() == "index":
                 found = False
                 for tab_name, info in self.__model.items():
                     for idx in tuple(info.indexes):
@@ -389,7 +395,26 @@ class JsonDb(DbBase):
                 aliases[col.this.name] = col.output_name
                 col = col.this
             cols.append(col.name)
-        tab = op.args["from"].args["expressions"][0].name
+
+        # Find FROM table across sqlglot versions
+        from_clause = op.args.get("from") or op.args.get("from_") or op.find(exp.From)
+        tab_expr = None
+        if from_clause and hasattr(from_clause, "args"):
+            if "expressions" in from_clause.args and from_clause.args["expressions"]:
+                tab_expr = from_clause.args["expressions"][0]
+            elif "this" in from_clause.args:
+                tab_expr = from_clause.args["this"]
+        if tab_expr is None:
+            # fallback: first Table in the select
+            tab_expr = next(iter(op.find_all(exp.Table)), None)
+        if tab_expr is None:
+            raise KeyError("from")
+
+        tab = (
+            getattr(tab_expr, "name", None)
+            or getattr(getattr(tab_expr, "this", None), "name", None)
+            or str(tab_expr)
+        )
         where = op.find(exp.Where)
         where_dict = self.__op_where(where, params)
         rows = self.__get_tab_dat(tab)
@@ -402,9 +427,6 @@ class JsonDb(DbBase):
         off = op.find(exp.Offset)
         if off:
             off = self.__val_from(off.expression, parameters)
-        # bug in sqlglot 10+11 flips this for sqlite parse
-        if lim is not None and off is not None:
-            (lim, off) = (off, lim)
 
         cntl = 0
         cnto = 0

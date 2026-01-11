@@ -15,6 +15,18 @@ except Exception:  # pragma: no cover
     logging.exception("failed mysql import for unknown reason")
     pass
 
+try:
+    # if you want this, install mysqlclient or pymysql
+    from .postgres import PostgresDb
+except ImportError:
+    pass
+except Exception:  # pragma: no cover
+    # apparently this can fail for weird reasons, not just import errors
+    import logging
+
+    logging.exception("failed postgres import for unknown reason")
+    pass
+
 from .sqlite import SqliteDb
 from .base import DbBase, Op, And, Or, ReconnectionArgs
 from .model import (
@@ -42,6 +54,7 @@ __all__ = [
     "SqliteDb",
     "JsonDb",
     "MySqlDb",
+    "PostgresDb",
     "DbRow",
     "DbBase",
     "DbType",

@@ -1,6 +1,14 @@
+sqlglot
+# drivers
+pymysql
+psycopg2-binary
+# dev
 pytest
 coverage>=5
+codecov
 pytest-cov
+pytest-xdist
+black
 flake8
-sqlglot
-pymysql
+pre-commit
+python-dotenv
