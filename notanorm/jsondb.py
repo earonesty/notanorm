@@ -225,7 +225,8 @@ class JsonDb(DbBase):
     def __op_drop(self, ret, op, parameters):
         tab = op.find(exp.Table)
         if tab:
-            if op.args["kind"] == "index":
+            kind = op.args.get("kind")
+            if isinstance(kind, str) and kind.lower() == "index":
                 found = False
                 for tab_name, info in self.__model.items():
                     for idx in tuple(info.indexes):
@@ -426,9 +427,6 @@ class JsonDb(DbBase):
         off = op.find(exp.Offset)
         if off:
             off = self.__val_from(off.expression, parameters)
-        # bug in sqlglot 10+11 flips this for sqlite parse
-        if lim is not None and off is not None:
-            (lim, off) = (off, lim)
 
         cntl = 0
         cnto = 0
