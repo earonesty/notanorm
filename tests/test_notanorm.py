@@ -717,12 +717,42 @@ def test_uri_parse():
     assert typ == MySqlDb
     assert kws == {"host": "localhost", "port": 3306, "db": "mydb"}
 
+    typ, args, kws = parse_db_uri("mysql://user:pass@localhost:3306/mydb")
+    assert typ == MySqlDb
+    assert kws == {
+        "host": "localhost",
+        "port": 3306,
+        "db": "mydb",
+        "user": "user",
+        "password": "pass",
+    }
+
+    typ, args, kws = parse_db_uri("mysql://user:p%3Aa%3Ass@localhost:3306/mydb")
+    assert typ == MySqlDb
+    assert kws == {
+        "host": "localhost",
+        "port": 3306,
+        "db": "mydb",
+        "user": "user",
+        "password": "p:a:ss",
+    }
+
     # Test URL-style with database in path
     typ, args, kws = parse_db_uri("postgres://localhost:5432/testdb")
     from notanorm import PostgresDb
 
     assert typ == PostgresDb
     assert kws == {"host": "localhost", "port": 5432, "dbname": "testdb"}
+
+    typ, args, kws = parse_db_uri("postgres://user:pass@localhost:5432/testdb")
+    assert typ == PostgresDb
+    assert kws == {
+        "host": "localhost",
+        "port": 5432,
+        "dbname": "testdb",
+        "user": "user",
+        "password": "pass",
+    }
 
     typ, args, kws = parse_db_uri(
         "mysql://localhost?use_unicode=false&autocommit=true&buffered=FaLsE&compress=TrUe"

@@ -1,5 +1,5 @@
 from typing import Tuple, List, Dict, Any, TypeVar, TYPE_CHECKING, Type
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 import notanorm
 
@@ -74,40 +74,38 @@ def _db_uri_style_2(dbstr: str) -> Tuple[str, List[str], Dict[str, Any]]:
 
     typ = res.scheme
 
-    # Parse netloc to extract host and port
-    # netloc can be: "host", "host:port", "user@host:port", etc.
     args = []
     kws = {}
 
+    # netloc can be: "host", "host:port", "user@host:port", etc.
+    #
+    # Important: use urlparse()'s builtin username/password/hostname/port handling.
+    # Manual ":" splitting breaks on user:password@host:port (password gets treated
+    # as part of the host).
     if res.netloc:
-        # Split netloc by comma for multiple hosts (if supported)
         netloc_parts = res.netloc.split(",")
         for netloc_part in netloc_parts:
-            # Check if port is present (format: host:port or user@host:port)
-            if ":" in netloc_part:
-                # Split by : to get host and port
-                # Handle IPv6 addresses by checking for brackets
-                if netloc_part.startswith("["):
-                    # IPv6 format: [::1]:port
-                    bracket_end = netloc_part.rindex("]")
-                    host = netloc_part[: bracket_end + 1]
-                    port_str = netloc_part[bracket_end + 2 :]
-                    if port_str:
-                        kws["port"] = port_str
-                    args.append(host)
-                else:
-                    # Regular format: host:port
-                    host, port_str = netloc_part.rsplit(":", 1)
-                    # Only treat as port if it's numeric
-                    try:
-                        int(port_str)
-                        kws["port"] = port_str
-                        args.append(host)
-                    except ValueError:
-                        # Not a port, treat whole thing as host
-                        args.append(netloc_part)
-            else:
+            part_res = urlparse(f"{res.scheme}://{netloc_part}", allow_fragments=False)
+
+            # hostname is already de-bracketed for IPv6; keep as-is
+            if part_res.hostname:
+                args.append(part_res.hostname)
+            elif netloc_part:
+                # Fall back to raw netloc part if parsing couldn't produce hostname
                 args.append(netloc_part)
+
+            try:
+                part_port = part_res.port
+            except ValueError:
+                part_port = None
+
+            if part_port is not None:
+                kws["port"] = str(part_port)
+
+            if part_res.username is not None:
+                kws["user"] = unquote(part_res.username)
+            if part_res.password is not None:
+                kws["password"] = unquote(part_res.password)
 
     # Parse path to extract database name
     # Path format: /database or /path/to/database
