@@ -31,7 +31,18 @@ jobs:
       name: Setup Python ${{ matrix.info.python }}
       with:
         python-version: ${{ matrix.info.python }}
-
+    
+    - name: Fix MySQL APT key (Ubuntu only)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y gnupg
+        gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
+        gpg --batch --export B7B3B788A8D3785C | sudo tee /usr/share/keyrings/mysql-archive-keyring.gpg > /dev/null
+        sudo apt-get -qq update
+    
     - uses: ankane/setup-mysql@v1
       with:
         mysql-version: ${{ matrix.info.mysql }}
