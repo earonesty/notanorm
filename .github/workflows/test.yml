@@ -32,18 +32,29 @@ jobs:
       with:
         python-version: ${{ matrix.info.python }}
     
-    - name: Fix MySQL APT key (Ubuntu only)
+    - name: Start MySQL (Linux)
       if: runner.os == 'Linux'
       shell: bash
       run: |
         set -euo pipefail
-        sudo apt-get -qq update
-        sudo apt-get -qq install -y gnupg
-        gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
-        gpg --batch --export B7B3B788A8D3785C | sudo tee /usr/share/keyrings/mysql-archive-keyring.gpg > /dev/null
-        sudo apt-get -qq update
-    
+        MYSQL_IMAGE="mysql:${{ matrix.info.mysql }}"
+        docker run -d --name mysql \
+          -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
+          -e MYSQL_DATABASE=test \
+          -p 3306:3306 \
+          "${MYSQL_IMAGE}"
+
+        for i in {1..60}; do
+          if docker exec mysql mysqladmin ping -h 127.0.0.1 --silent; then
+            exit 0
+          fi
+          sleep 2
+        done
+        docker logs mysql
+        exit 1
+
     - uses: ankane/setup-mysql@v1
+      if: runner.os == 'Windows'
       with:
         mysql-version: ${{ matrix.info.mysql }}
 
