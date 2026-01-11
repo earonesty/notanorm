@@ -997,9 +997,9 @@ def test_joinq_left(db):
     assert len(list(row for row in rows if row.cid is not None)) == 3
 
 
-def test_joinq_right(db_mysql):
+@pytest.mark.db("mysql", "postgres")
+def test_joinq_right(db):
     # sqlite does not support right joins
-    db = db_mysql
     create_and_fill_test_db(db, 3, "a", aid="integer primary key", bid="integer")
     create_and_fill_test_db(db, 5, "b", bid="integer primary key", cid="integer")
 
