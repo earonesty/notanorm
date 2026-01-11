@@ -54,6 +54,10 @@ class MySqlDb(DbBase):
         if "database" in kws and "db" not in kws:
             kws["db"] = kws.pop("database")
 
+        # Normalize to canonical kw names (library-agnostic).
+        if "passwd" in kws and "password" not in kws:
+            kws["password"] = kws.pop("passwd")
+
         # adjust to appropriate types
         typ: Callable[[Any], Any]
         for nam, typ in [
@@ -126,6 +130,14 @@ class MySqlDb(DbBase):
         return exp
 
     def _connect(self, *args, **kws):
+        # mysqlclient uses `passwd`, pymysql uses `password`; accept canonical `password`.
+        if MySQLLib and getattr(MySQLLib, "__name__", "") == "MySQLdb":
+            if "password" in kws and "passwd" not in kws:
+                kws["passwd"] = kws.pop("password")
+        else:
+            if "passwd" in kws and "password" not in kws:
+                kws["password"] = kws.pop("passwd")
+
         if pymysql_force_flags:
             kws["client_flag"] = kws.get("client_flag", 0) | pymysql_force_flags
         conn = MySQLLib.connect(*args, **kws)
