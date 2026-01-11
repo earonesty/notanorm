@@ -18,11 +18,11 @@ jobs:
             postgres: 14
           - os: ubuntu-latest
             python: 3.13
-            mysql: 8.0
+            mysql: 8.4
             postgres: 18
           - os: windows-2022
             python: 3.13
-            mysql: 5.7
+            mysql: 8.0
             postgres: 14
     name: ${{matrix.info.os}} ${{ matrix.info.python }} ${{ matrix.info.mysql }} ${{ matrix.info.postgres }}
     steps:
@@ -35,6 +35,16 @@ jobs:
     - uses: ankane/setup-mysql@v1
       with:
         mysql-version: ${{ matrix.info.mysql }}
+
+    - name: Configure MySQL client (for tests)
+      run: |
+        cat > ~/.my.cnf <<'EOF'
+        [client]
+        user=root
+        password=root
+        host=127.0.0.1
+        port=3306
+        EOF
 
     - name: Setup PostgreSQL
       uses: ikalnytskyi/action-setup-postgres@v8
