@@ -11,4 +11,4 @@ pytest-xdist
 black
 flake8
 pre-commit
-dotenv
+python-dotenv
