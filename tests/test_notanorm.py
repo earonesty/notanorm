@@ -254,14 +254,14 @@ def test_db_class(db):
 
     obj = db.select_one("foo", bar="hi", __class=Foo)
 
-    assert type(obj) == Foo
+    assert isinstance(obj, Foo)
 
     db.register_class("foo", Foo)
 
     obj = db.select_one("foo", bar="hi")
 
     assert obj.bar == "hi"
-    assert type(obj) == Foo
+    assert isinstance(obj, Foo)
 
 
 def test_db_select_in(db):
@@ -506,7 +506,6 @@ def test_select_gen_not_lock(db: DbBase):
     ev2 = threading.Event()
 
     def slow_q():
-        nonlocal thread_result
         for row in db.select_gen("foo", order_by="bar desc"):
             thread_result.append(row.bar)
             ev1.set()

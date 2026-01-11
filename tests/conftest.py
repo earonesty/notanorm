@@ -248,7 +248,6 @@ def db_notmem_fixture(request, db_name):
 def pytest_generate_tests(metafunc):
     """Converts user-argument --db to fixture parameters."""
 
-    global PYTEST_REG  # pylint: disable=global-statement
     if not PYTEST_REG:
         if any(db in metafunc.fixturenames for db in ("db", "db_notmem", "db_sqlup")):
             db_names = metafunc.config.getoption("db", [])

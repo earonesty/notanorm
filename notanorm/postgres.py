@@ -1,7 +1,7 @@
 import re
 import logging
 from collections import defaultdict
-from typing import Tuple, Any, Callable, List, Dict
+from typing import Tuple, Any, Callable, Dict
 from functools import partial
 import psycopg2
 import psycopg2.extras
@@ -625,8 +625,8 @@ class PostgresDb(DbBase):
             JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
             JOIN pg_class c ON c.oid = i.indrelid
             JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = 'public' 
-            AND c.relname = %s 
+            WHERE n.nspname = 'public'
+            AND c.relname = %s
             AND i.indisprimary = true
             AND a.attrelid = c.oid
             ORDER BY a.attnum;

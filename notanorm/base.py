@@ -843,7 +843,9 @@ class DbBase(
                         raise
                     sleep_time = backoff
                     if self.recon_jitter:
-                        sleep_time = secrets.SystemRandom().uniform(sleep_time * 0.5, sleep_time * 1.5)
+                        sleep_time = secrets.SystemRandom().uniform(
+                            sleep_time * 0.5, sleep_time * 1.5
+                        )
                     time.sleep(sleep_time)
                     backoff *= self.reconnect_backoff_factor
                 else:
