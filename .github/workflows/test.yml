@@ -53,6 +53,21 @@ jobs:
         docker logs mysql
         exit 1
 
+    - name: Configure MySQL client (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > ~/.my.cnf <<'EOF'
+        [client]
+        host=127.0.0.1
+        port=3306
+        user=root
+        password=
+        protocol=tcp
+        EOF
+        chmod 600 ~/.my.cnf
+
     - uses: ankane/setup-mysql@v1
       if: runner.os == 'Windows'
       with:
