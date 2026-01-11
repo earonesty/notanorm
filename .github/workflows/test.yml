@@ -12,11 +12,11 @@ jobs:
     strategy:
       matrix:
         info:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             python: 3.9
             mysql: 8.0
             postgres: 14
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             python: 3.13
             mysql: 8.4
             postgres: 18
@@ -26,8 +26,8 @@ jobs:
             postgres: 14
     name: ${{matrix.info.os}} ${{ matrix.info.python }} ${{ matrix.info.mysql }} ${{ matrix.info.postgres }}
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-python@v2
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       name: Setup Python ${{ matrix.info.python }}
       with:
         python-version: ${{ matrix.info.python }}
@@ -35,16 +35,6 @@ jobs:
     - uses: ankane/setup-mysql@v1
       with:
         mysql-version: ${{ matrix.info.mysql }}
-
-    - name: Configure MySQL client (for tests)
-      run: |
-        cat > ~/.my.cnf <<'EOF'
-        [client]
-        user=root
-        password=root
-        host=127.0.0.1
-        port=3306
-        EOF
 
     - name: Setup PostgreSQL
       uses: ikalnytskyi/action-setup-postgres@v8
