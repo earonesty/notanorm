@@ -1,4 +1,4 @@
-sqlglot
+sqlglot==28.5.0
 # drivers
 mysqlclient
 psycopg2-binary
