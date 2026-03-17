@@ -17,7 +17,7 @@ setup(
     version="3.10.2",
     description="DB wrapper library",
     packages=["notanorm"],
-    url="https://github.com/AtakamaLLC/notanorm",
+    url="https://github.com/earonesty/notanorm",
     long_description=long_description(),
     long_description_content_type="text/markdown",
     setup_requires=["wheel"],
