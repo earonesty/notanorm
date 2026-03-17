@@ -8,7 +8,7 @@ coverage>=5
 codecov
 pytest-cov
 pytest-xdist
-black
+black==24.3.0
 flake8
 pre-commit
 python-dotenv
